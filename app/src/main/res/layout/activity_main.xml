@@ -3,14 +3,22 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Home screen: blank canvas over wallpaper. Swipe up OR tap the handle below opens the drawer. -->
     <FrameLayout
         android:id="@+id/homeRoot"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent">
 
-    <!-- Always-visible drawer handle: swipe gestures don't register reliably on emulators/mouse input,
-         so this button guarantees the app drawer is always reachable with a plain tap. -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/homeAppsGrid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:paddingTop="32dp"
+            android:paddingHorizontal="8dp"
+            android:clipToPadding="false" />
+
+    </FrameLayout>
+
     <TextView
         android:id="@+id/openDrawerHandle"
         android:layout_width="wrap_content"
@@ -26,7 +34,6 @@
         android:clickable="true"
         android:focusable="true" />
 
-    <!-- App drawer overlay, hidden by default -->
     <LinearLayout
         android:id="@+id/appDrawerContainer"
         android:layout_width="match_parent"
