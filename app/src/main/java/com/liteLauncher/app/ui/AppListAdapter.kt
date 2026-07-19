@@ -12,8 +12,9 @@ import com.liteLauncher.app.data.AppRepository
 
 class AppListAdapter(
     private val repository: AppRepository,
+    private val badgeSymbol: String,
     private val onAppClick: (AppInfo) -> Unit,
-    private val onAppLongClick: (AppInfo, View) -> Unit
+    private val onBadgeClick: (AppInfo, View) -> Unit
 ) : RecyclerView.Adapter<AppListAdapter.AppViewHolder>() {
 
     private var fullList: List<AppInfo> = emptyList()
@@ -25,7 +26,6 @@ class AppListAdapter(
         notifyDataSetChanged()
     }
 
-    /** Filters the visible list without re-querying PackageManager */
     fun filter(query: String) {
         shownList = if (query.isBlank()) {
             fullList
@@ -38,6 +38,7 @@ class AppListAdapter(
     inner class AppViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val icon: ImageView = view.findViewById(R.id.appIcon)
         val label: TextView = view.findViewById(R.id.appLabel)
+        val badge: TextView = view.findViewById(R.id.itemBadge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AppViewHolder {
@@ -49,12 +50,11 @@ class AppListAdapter(
     override fun onBindViewHolder(holder: AppViewHolder, position: Int) {
         val app = shownList[position]
         holder.label.text = app.label
-        holder.icon.setImageDrawable(repository.getIcon(app)) // served from LruCache after first load
+        holder.icon.setImageDrawable(repository.getIcon(app))
+        holder.badge.text = badgeSymbol
+
         holder.itemView.setOnClickListener { onAppClick(app) }
-        holder.itemView.setOnLongClickListener {
-            onAppLongClick(app, holder.itemView)
-            true
-        }
+        holder.badge.setOnClickListener { onBadgeClick(app, holder.badge) }
     }
 
     override fun getItemCount(): Int = shownList.size
