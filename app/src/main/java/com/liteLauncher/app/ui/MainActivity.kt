@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var repository: AppRepository
     private lateinit var adapter: AppListAdapter
     private lateinit var gestureDetector: GestureDetector
+    private var showingHiddenApps = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,16 +36,76 @@ class MainActivity : AppCompatActivity() {
         setSystemWallpaperAsBackground()
         setupAppDrawer()
         setupSwipeGesture()
+        setupHomeScreenControls()
         loadApps()
     }
 
+    override fun onResume() {
+        super.onResume()
+        setSystemWallpaperAsBackground()
+        if (binding.appDrawerContainer.visibility != View.VISIBLE) {
+            loadApps()
+        }
+    }
+
+    private fun setupHomeScreenControls() {
+        binding.openDrawerHandle.setOnClickListener { openAppDrawer() }
+
+        binding.homeRoot.setOnLongClickListener {
+            showHomeScreenMenu(it)
+            true
+        }
+
+        binding.drawerMenuButton.setOnClickListener { showDrawerOverflowMenu(it) }
+    }
+
+    private fun showHomeScreenMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add("Change wallpaper")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "Change wallpaper" -> {
+                    val intent = Intent(Intent.ACTION_SET_WALLPAPER)
+                    startActivity(Intent.createChooser(intent, "Set wallpaper"))
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun showDrawerOverflowMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(if (showingHiddenApps) "Show all apps" else "Manage hidden apps")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "Manage hidden apps" -> {
+                    showingHiddenApps = true
+                    binding.searchInput.setText("")
+                    lifecycleScope.launch {
+                        adapter.submitList(repository.loadHiddenApps())
+                    }
+                    true
+                }
+                "Show all apps" -> {
+                    showingHiddenApps = false
+                    lifecycleScope.launch {
+                        adapter.submitList(repository.loadInstalledApps())
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
     private fun setSystemWallpaperAsBackground() {
-        // Use the device's actual wallpaper instead of shipping our own image asset -> saves APK size
         try {
             val wallpaperManager = WallpaperManager.getInstance(this)
             binding.homeRoot.background = wallpaperManager.drawable
         } catch (e: SecurityException) {
-            // no wallpaper permission on some OEM builds; fall back to theme background color
         }
     }
 
@@ -57,7 +118,7 @@ class MainActivity : AppCompatActivity() {
         binding.appDrawerRecycler.apply {
             layoutManager = GridLayoutManager(this@MainActivity, 4)
             adapter = this@MainActivity.adapter
-            setHasFixedSize(true) // perf: item sizes don't change -> skip extra layout passes
+            setHasFixedSize(true)
         }
 
         binding.searchInput.addTextChangedListener { text ->
@@ -91,6 +152,10 @@ class MainActivity : AppCompatActivity() {
     private fun closeAppDrawer() {
         binding.appDrawerContainer.visibility = View.GONE
         binding.searchInput.setText("")
+        if (showingHiddenApps) {
+            showingHiddenApps = false
+            loadApps()
+        }
     }
 
     override fun onBackPressed() {
@@ -111,6 +176,7 @@ class MainActivity : AppCompatActivity() {
     private fun showAppOptionsMenu(app: AppInfo, anchor: View) {
         val popup = PopupMenu(this, anchor)
         popup.menu.add("App info")
+        popup.menu.add(if (showingHiddenApps) "Unhide" else "Hide")
         popup.menu.add("Uninstall")
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
@@ -119,6 +185,16 @@ class MainActivity : AppCompatActivity() {
                         data = Uri.parse("package:${app.packageName}")
                     }
                     startActivity(intent)
+                    true
+                }
+                "Hide" -> {
+                    repository.hideApp(app.packageName)
+                    lifecycleScope.launch { adapter.submitList(repository.loadInstalledApps()) }
+                    true
+                }
+                "Unhide" -> {
+                    repository.unhideApp(app.packageName)
+                    lifecycleScope.launch { adapter.submitList(repository.loadHiddenApps()) }
                     true
                 }
                 "Uninstall" -> {
