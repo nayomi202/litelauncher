@@ -15,27 +15,39 @@ data class AppInfo(
     val activityName: String
 )
 
-/**
- * Loads installed apps and caches their icons in memory (LruCache) so scrolling
- * the app drawer never re-reads icons from disk/PackageManager after the first load.
- * Icon cache size is capped relative to available memory -> safe on low-RAM devices.
- */
 class AppRepository(private val context: Context) {
 
     private val packageManager: PackageManager = context.packageManager
+    private val prefs = context.getSharedPreferences("lite_launcher_prefs", Context.MODE_PRIVATE)
+
+    private fun getHiddenSet(): MutableSet<String> =
+        HashSet(prefs.getStringSet("hidden_packages", emptySet()) ?: emptySet())
+
+    fun hideApp(packageName: String) {
+        val hidden = getHiddenSet()
+        hidden.add(packageName)
+        prefs.edit().putStringSet("hidden_packages", hidden).apply()
+    }
+
+    fun unhideApp(packageName: String) {
+        val hidden = getHiddenSet()
+        hidden.remove(packageName)
+        prefs.edit().putStringSet("hidden_packages", hidden).apply()
+    }
+
+    fun isHidden(packageName: String): Boolean = getHiddenSet().contains(packageName)
 
     private val iconCache: LruCache<String, Drawable> by lazy {
         val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
-        val cacheSizeKb = maxMemoryKb / 16 // use ~1/16th of available heap for icons
+        val cacheSizeKb = maxMemoryKb / 16
         object : LruCache<String, Drawable>(cacheSizeKb) {
             override fun sizeOf(key: String, value: Drawable): Int {
-                // rough estimate: bitmap-ish size in KB
                 return (value.intrinsicWidth * value.intrinsicHeight * 4) / 1024 + 1
             }
         }
     }
 
-    suspend fun loadInstalledApps(): List<AppInfo> = withContext(Dispatchers.Default) {
+    private suspend fun loadAllApps(): List<AppInfo> = withContext(Dispatchers.Default) {
         val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
@@ -51,6 +63,16 @@ class AppRepository(private val context: Context) {
             }
             .distinctBy { it.packageName + it.activityName }
             .sortedBy { it.label.lowercase() }
+    }
+
+    suspend fun loadInstalledApps(): List<AppInfo> {
+        val hidden = getHiddenSet()
+        return loadAllApps().filterNot { hidden.contains(it.packageName) }
+    }
+
+    suspend fun loadHiddenApps(): List<AppInfo> {
+        val hidden = getHiddenSet()
+        return loadAllApps().filter { hidden.contains(it.packageName) }
     }
 
     fun getIcon(app: AppInfo): Drawable {
