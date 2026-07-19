@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission"
+        xmlns:tools="http://schemas.android.com/tools" />
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:theme="@style/Theme.LiteLauncher"
+        android:hardwareAccelerated="true"
+        android:largeHeap="false">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:resizeableActivity="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.LiteLauncher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <!-- This category + HOME is what lets Android offer this app
+                     as a launcher/home-screen replacement -->
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

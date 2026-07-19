@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.LiteLauncher" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>
