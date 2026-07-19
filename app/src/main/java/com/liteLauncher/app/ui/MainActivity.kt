@@ -2,14 +2,14 @@ package com.liteLauncher.app.ui
 
 import android.app.WallpaperManager
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.View
 import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -22,8 +22,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var repository: AppRepository
-    private lateinit var adapter: AppListAdapter
-    private lateinit var gestureDetector: GestureDetector
+    private lateinit var drawerAdapter: AppListAdapter
+    private lateinit var homeAdapter: AppListAdapter
     private var showingHiddenApps = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,17 +34,51 @@ class MainActivity : AppCompatActivity() {
         repository = AppRepository(applicationContext)
 
         setSystemWallpaperAsBackground()
+        applyStatusBarTransparency()
+        setupHomeAppsGrid()
         setupAppDrawer()
-        setupSwipeGesture()
         setupHomeScreenControls()
         loadApps()
+        loadHomeApps()
     }
 
     override fun onResume() {
         super.onResume()
         setSystemWallpaperAsBackground()
+        applyStatusBarTransparency()
         if (binding.appDrawerContainer.visibility != View.VISIBLE) {
             loadApps()
+        }
+        loadHomeApps()
+    }
+
+    private fun setupHomeAppsGrid() {
+        homeAdapter = AppListAdapter(
+            repository = repository,
+            badgeSymbol = "×",
+            onAppClick = { app -> repository.launchApp(app) },
+            onBadgeClick = { app, _ ->
+                repository.unpinApp(app.packageName)
+                loadHomeApps()
+            }
+        )
+        binding.homeAppsGrid.apply {
+            layoutManager = GridLayoutManager(this@MainActivity, 4)
+            adapter = homeAdapter
+        }
+    }
+
+    private fun loadHomeApps() {
+        homeAdapter.submitList(repository.loadPinnedApps())
+    }
+
+    private fun applyStatusBarTransparency() {
+        if (repository.isStatusBarTransparent()) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = Color.TRANSPARENT
+        } else {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            window.statusBarColor = Color.BLACK
         }
     }
 
@@ -62,11 +96,25 @@ class MainActivity : AppCompatActivity() {
     private fun showHomeScreenMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
         popup.menu.add("Change wallpaper")
+        popup.menu.add(
+            if (repository.isStatusBarTransparent()) "Disable transparent status bar"
+            else "Enable transparent status bar"
+        )
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
                 "Change wallpaper" -> {
                     val intent = Intent(Intent.ACTION_SET_WALLPAPER)
                     startActivity(Intent.createChooser(intent, "Set wallpaper"))
+                    true
+                }
+                "Enable transparent status bar" -> {
+                    repository.setStatusBarTransparent(true)
+                    applyStatusBarTransparency()
+                    true
+                }
+                "Disable transparent status bar" -> {
+                    repository.setStatusBarTransparent(false)
+                    applyStatusBarTransparency()
                     true
                 }
                 else -> false
@@ -84,14 +132,14 @@ class MainActivity : AppCompatActivity() {
                     showingHiddenApps = true
                     binding.searchInput.setText("")
                     lifecycleScope.launch {
-                        adapter.submitList(repository.loadHiddenApps())
+                        drawerAdapter.submitList(repository.loadHiddenApps())
                     }
                     true
                 }
                 "Show all apps" -> {
                     showingHiddenApps = false
                     lifecycleScope.launch {
-                        adapter.submitList(repository.loadInstalledApps())
+                        drawerAdapter.submitList(repository.loadInstalledApps())
                     }
                     true
                 }
@@ -110,38 +158,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupAppDrawer() {
-        adapter = AppListAdapter(
+        drawerAdapter = AppListAdapter(
             repository = repository,
-            onAppClick = { app -> repository.launchApp(app) },
-            onAppLongClick = { app, view -> showAppOptionsMenu(app, view) }
+            badgeSymbol = "⋮",
+            onAppClick = { app ->
+                repository.launchApp(app)
+                closeAppDrawer()
+            },
+            onBadgeClick = { app, view -> showAppOptionsMenu(app, view) }
         )
         binding.appDrawerRecycler.apply {
             layoutManager = GridLayoutManager(this@MainActivity, 4)
-            adapter = this@MainActivity.adapter
+            adapter = drawerAdapter
             setHasFixedSize(true)
         }
 
         binding.searchInput.addTextChangedListener { text ->
-            adapter.filter(text?.toString().orEmpty())
-        }
-    }
-
-    private fun setupSwipeGesture() {
-        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(
-                e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float
-            ): Boolean {
-                if (e1 == null) return false
-                val deltaY = e1.y - e2.y
-                if (deltaY > 150 && velocityY < -300) {
-                    openAppDrawer()
-                    return true
-                }
-                return false
-            }
-        })
-        binding.homeRoot.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
+            drawerAdapter.filter(text?.toString().orEmpty())
         }
     }
 
@@ -169,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadApps() {
         lifecycleScope.launch {
             val apps = repository.loadInstalledApps()
-            adapter.submitList(apps)
+            drawerAdapter.submitList(apps)
         }
     }
 
@@ -177,6 +210,7 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, anchor)
         popup.menu.add("App info")
         popup.menu.add(if (showingHiddenApps) "Unhide" else "Hide")
+        popup.menu.add(if (repository.isPinned(app.packageName)) "Remove from home screen" else "Add to home screen")
         popup.menu.add("Uninstall")
         popup.setOnMenuItemClickListener { item ->
             when (item.title) {
@@ -189,12 +223,22 @@ class MainActivity : AppCompatActivity() {
                 }
                 "Hide" -> {
                     repository.hideApp(app.packageName)
-                    lifecycleScope.launch { adapter.submitList(repository.loadInstalledApps()) }
+                    lifecycleScope.launch { drawerAdapter.submitList(repository.loadInstalledApps()) }
                     true
                 }
                 "Unhide" -> {
                     repository.unhideApp(app.packageName)
-                    lifecycleScope.launch { adapter.submitList(repository.loadHiddenApps()) }
+                    lifecycleScope.launch { drawerAdapter.submitList(repository.loadHiddenApps()) }
+                    true
+                }
+                "Add to home screen" -> {
+                    repository.pinApp(app)
+                    loadHomeApps()
+                    true
+                }
+                "Remove from home screen" -> {
+                    repository.unpinApp(app.packageName)
+                    loadHomeApps()
                     true
                 }
                 "Uninstall" -> {
