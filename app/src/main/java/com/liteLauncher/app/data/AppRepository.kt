@@ -37,6 +37,45 @@ class AppRepository(private val context: Context) {
 
     fun isHidden(packageName: String): Boolean = getHiddenSet().contains(packageName)
 
+    // --- Home screen pinned apps ---
+    private fun getPinnedOrder(): List<String> =
+        prefs.getString("pinned_apps_order", "")
+            ?.split(";")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+    private fun savePinnedOrder(entries: List<String>) {
+        prefs.edit().putString("pinned_apps_order", entries.joinToString(";")).apply()
+    }
+
+    fun isPinned(packageName: String): Boolean =
+        getPinnedOrder().any { it.substringBefore("|") == packageName }
+
+    fun pinApp(app: AppInfo) {
+        if (isPinned(app.packageName)) return
+        val entries = getPinnedOrder().toMutableList()
+        entries.add("${app.packageName}|${app.activityName}|${app.label}")
+        savePinnedOrder(entries)
+    }
+
+    fun unpinApp(packageName: String) {
+        val entries = getPinnedOrder().filterNot { it.substringBefore("|") == packageName }
+        savePinnedOrder(entries)
+    }
+
+    fun loadPinnedApps(): List<AppInfo> =
+        getPinnedOrder().mapNotNull { entry ->
+            val parts = entry.split("|")
+            if (parts.size >= 3) AppInfo(label = parts[2], packageName = parts[0], activityName = parts[1]) else null
+        }
+
+    // --- Status bar transparency ---
+    fun isStatusBarTransparent(): Boolean = prefs.getBoolean("status_bar_transparent", false)
+
+    fun setStatusBarTransparent(transparent: Boolean) {
+        prefs.edit().putBoolean("status_bar_transparent", transparent).apply()
+    }
+
     private val iconCache: LruCache<String, Drawable> by lazy {
         val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
         val cacheSizeKb = maxMemoryKb / 16
